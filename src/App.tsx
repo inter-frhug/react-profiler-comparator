@@ -2,7 +2,17 @@ import { useState } from 'react';
 import { FlameGraph } from 'react-flame-graph';
 import { parseProfilerForFlameGraph, FlameGraphNode } from './parser';
 
-const Input = (props) => <input {...props} className='border rounded px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500' />;
+const inputStyle = {
+  border: '1px solid #ccc',
+  borderRadius: 4,
+  padding: '8px 12px',
+  width: '100%',
+  fontSize: 14,
+  outline: 'none',
+  boxSizing: 'border-box',
+  marginBottom: 8,
+};
+const Input = (props) => <input {...props} style={inputStyle} />;
 
 export default function App() {
   const [profiles, setProfiles] = useState<[FlameGraphNode | null, FlameGraphNode | null]>([null, null]);
@@ -25,7 +35,7 @@ export default function App() {
     }
   };
 
-  // Calculate the max depth of the loaded flamegraph for dynamic height
+  // Calculate the max depth of the loaded flame graph for dynamic height
   function getMaxDepth(node: FlameGraphNode | null): number {
     if (!node) return 0;
     if (!node.children || node.children.length === 0) return 1;
@@ -38,26 +48,54 @@ export default function App() {
   const flameGraphHeight = Math.max(200, maxDepth * 28 + 40); // 28 for padding, 40 for header
 
   return (
-    <div className="min-h-screen flex flex-col items-stretch justify-start p-0 m-0 bg-white">
-      <h1 className='text-2xl font-bold mb-4 mt-4 ml-6'>React Profiler Comparison</h1>
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4 w-full'>
-        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }} className='mt-0'>
-          {[0, 1].map((i) => (
-            <div key={i} className="mr-4">
-              <Input type='file' accept='application/json' onChange={(e) => handleFileUpload(i, e)} />
-              {profiles[i] && (
-                <FlameGraph
-                  data={profiles[i]}
-                  height={flameGraphHeight}
-                  width={800}
-                  onChange={(node) => {
-                    console.log(`"${node.name}" focused`);
-                  }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+        padding: 0,
+        background: '#fff',
+        marginLeft: 32,
+        marginTop: 32,
+      }}
+    >
+      <h1
+        style={{
+          fontSize: '2.2rem',
+          fontWeight: 700,
+          marginLeft: 16,
+          marginBottom: 24,
+          marginTop: 0,
+          color: '#213547',
+        }}
+      >
+        React Profiler Comparison
+      </h1>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 16,
+          width: '100%',
+        }}
+      >
+        {[0, 1].map((i) => (
+          <div key={i} style={{ marginRight: 16, flex: 1 }}>
+            <Input type='file' accept='application/json' onChange={(e) => handleFileUpload(i, e)} />
+            {profiles[i] && (
+              <FlameGraph
+                data={profiles[i]}
+                height={flameGraphHeight}
+                width={800}
+                onChange={(node) => {
+                  console.log(`"${node.name}" focused`);
+                }}
+              />
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

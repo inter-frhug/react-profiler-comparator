@@ -7,10 +7,53 @@ export type FlameGraphNode = {
   color?: string;
 };
 
+type TimelineData = {
+  batchUIDToMeasuresKeyValueArray: [
+    number,
+    Array<{
+      type: string;
+      batchUID: number;
+      depth: number;
+      lanes: number[];
+      timestamp: number;
+      duration: number;
+    }>
+  ][];
+  componentMeasures: Array<{
+    componentName: string;
+    duration: number;
+    timestamp: number;
+    type: string;
+    warning: string | null;
+  }>;
+  duration: number;
+  flamechart: any[];
+  internalModuleSourceToRanges: any[];
+  laneToLabelKeyValueArray: [number, string | null][];
+  laneToReactMeasureKeyValueArray: [number, any[]][];
+  nativeEvents: any[];
+  networkMeasures: any[];
+  otherUserTimingMarks: any[];
+  reactVersion: string;
+  schedulingEvents: Array<{
+    componentName: string;
+    lanes: number[];
+    timestamp: number;
+    type: string;
+    warning: string | null;
+    componentStack: string;
+  }>;
+  snapshots: any[];
+  snapshotHeight: number;
+  startTime: number;
+  suspenseEvents: any[];
+  thrownErrors: any[];
+};
+
 type ProfilerJSON = {
   version: number;
   dataForRoots: RootData[];
-  timelineData: any[];
+  timelineData: TimelineData[];
 };
 
 type RootData = {
