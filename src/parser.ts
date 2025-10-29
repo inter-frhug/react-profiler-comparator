@@ -95,26 +95,51 @@ export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[]
     return { base: name, isMemo: false };
   }
 
-  // Build a map from both base and memoized names to durations
-  const nameToDurations: Record<string, number[]> = {};
+  // Build a comprehensive map of component render durations
+  const componentDurations: Record<string, number[]> = {};
+  const componentTotalDurations: Record<string, number[]> = {};
+
   if (Array.isArray(json.timelineData)) {
     for (const timeline of json.timelineData) {
       if (Array.isArray(timeline.componentMeasures)) {
         for (const measure of timeline.componentMeasures) {
-          if (measure.componentName) {
+          if (measure.componentName && measure.type === 'render') {
             const { base, isMemo } = parseMemo(measure.componentName);
-            // Store under base name
-            if (!nameToDurations[base]) {
-              nameToDurations[base] = [];
+            const componentName = isMemo ? `${base} (Memo)` : base;
+
+            if (!componentDurations[componentName]) {
+              componentDurations[componentName] = [];
             }
-            nameToDurations[base].push(measure.duration);
-            // Also store under base + ' (Memo)' if memoized
-            if (isMemo) {
-              const memoName = base + ' (Memo)';
-              if (!nameToDurations[memoName]) {
-                nameToDurations[memoName] = [];
+            componentDurations[componentName].push(measure.duration);
+          }
+        }
+      }
+    }
+  }
+
+  // Get fiber actual durations from commit data for more accurate timing
+  for (const root of json.dataForRoots) {
+    if (Array.isArray(root.commitData)) {
+      for (const commit of root.commitData) {
+        if (Array.isArray(commit.fiberActualDurations)) {
+          for (const [fiberId, duration] of commit.fiberActualDurations) {
+            // Map fiber IDs to component names through snapshots
+            let snapshots: Snapshots;
+            if (Array.isArray((root as any).snapshots)) {
+              snapshots = Object.fromEntries((root as any).snapshots);
+            } else {
+              snapshots = root.snapshots as Snapshots;
+            }
+
+            const node = snapshots[fiberId];
+            if (node && node.displayName) {
+              const { base, isMemo } = parseMemo(node.displayName);
+              const componentName = isMemo ? `${base} (Memo)` : base;
+
+              if (!componentTotalDurations[componentName]) {
+                componentTotalDurations[componentName] = [];
               }
-              nameToDurations[memoName].push(measure.duration);
+              componentTotalDurations[componentName].push(duration);
             }
           }
         }
@@ -123,42 +148,89 @@ export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[]
   }
 
   // Helper to recursively build FlameGraphNode from snapshot id
-  function buildNode(id: number, snapshots: Snapshots): FlameGraphNode {
+  function buildNode(id: number, snapshots: Snapshots, parentDuration?: number): FlameGraphNode {
     const node = snapshots[id];
     if (!node) {
-      return { name: 'Unknown', value: 0 };
-    }
-    let children: FlameGraphNode[] | undefined = undefined;
-    let value = 1;
-    if (node.children && node.children.length > 0) {
-      children = node.children.map((childId) => buildNode(childId, snapshots));
-      value = children.reduce((sum, child) => sum + child.value, 0);
+      return { name: 'Unknown', value: 1 };
     }
 
-    // Find the first matching duration for this node's displayName (handle Memo)
-    let displayName = node.displayName || 'Unknown';
-    const { base, isMemo } = parseMemo(displayName);
-    let nameWithDuration = base;
-    if (isMemo) {
-      nameWithDuration += ' (Memo)';
+    let displayName = node.displayName || (node.type === 11 ? 'Fragment' : 'Unknown');
+
+    // Skip Fragment nodes and unwrap to children
+    if (node.type === 11 && node.children && node.children.length === 1) {
+      return buildNode(node.children[0], snapshots, parentDuration);
     }
+
+    const { base, isMemo } = parseMemo(displayName);
+    let componentName = isMemo ? `${base} (Memo)` : base;
+
+    // Build children first to calculate proper value
+    let children: FlameGraphNode[] | undefined = undefined;
+    let totalChildValue = 0;
+
+    if (node.children && node.children.length > 0) {
+      children = node.children.map((childId) => buildNode(childId, snapshots));
+      totalChildValue = children.reduce((sum, child) => sum + child.value, 0);
+    }
+
+    // Get duration for this component
+    let duration: number | undefined;
+    let actualDuration: number | undefined;
+
+    // First try to get actual duration from fiber data
+    if (componentTotalDurations[componentName] && componentTotalDurations[componentName].length > 0) {
+      actualDuration = componentTotalDurations[componentName].shift();
+    }
+
+    // Then try component measures
+    if (componentDurations[componentName] && componentDurations[componentName].length > 0) {
+      duration = componentDurations[componentName].shift();
+    }
+
+    // Use the more accurate duration
+    const finalDuration = actualDuration !== undefined ? actualDuration : duration;
+
+    // Calculate value based on duration or default to child count + 1
+    let value = Math.max(1, totalChildValue);
+    if (finalDuration !== undefined && finalDuration > 0) {
+      // Scale value based on duration (multiply by 10 to make differences more visible)
+      value = Math.max(1, Math.round(finalDuration * 10));
+    }
+
+    // Format name with duration
+    let nameWithDuration = componentName;
     let backgroundColor: string | undefined = undefined;
-    let tooltip = `id: ${node.id}`;
-    // Try both base and base + ' (Memo)' for duration lookup
-    let durationArr = nameToDurations[nameWithDuration] && nameToDurations[nameWithDuration].length > 0 ? nameToDurations[nameWithDuration] : nameToDurations[base] && nameToDurations[base].length > 0 ? nameToDurations[base] : undefined;
-    if (durationArr) {
-      const duration = durationArr.shift();
-      if (typeof duration === 'number') {
-        if (duration === 0) {
-          nameWithDuration += ' (<0.1ms)';
-        } else {
-          nameWithDuration += ` (${duration.toFixed(2)}ms)`;
-        }
+    let color: string | undefined = undefined;
+    let tooltip = `Component: ${componentName}`;
+
+    if (finalDuration !== undefined) {
+      if (finalDuration === 0) {
+        nameWithDuration += ' (<0.1ms)';
+        backgroundColor = '#22c55e'; // Bright green for very fast renders
+        color = '#ffffff';
+      } else if (finalDuration < 0.5) {
+        nameWithDuration += ` (${finalDuration.toFixed(1)}ms)`;
+        backgroundColor = '#84cc16'; // Lime green for fast renders
+        color = '#ffffff';
+      } else if (finalDuration < 2) {
+        nameWithDuration += ` (${finalDuration.toFixed(1)}ms)`;
+        backgroundColor = '#eab308'; // Bright yellow for moderate renders
+        color = '#000000';
+      } else if (finalDuration < 5) {
+        nameWithDuration += ` (${finalDuration.toFixed(1)}ms)`;
+        backgroundColor = '#f97316'; // Orange for slower renders
+        color = '#ffffff';
+      } else {
+        nameWithDuration += ` (${finalDuration.toFixed(1)}ms)`;
+        backgroundColor = '#ef4444'; // Bright red for slow renders
+        color = '#ffffff';
       }
+      tooltip += `\nRender time: ${finalDuration.toFixed(2)}ms`;
     } else {
-      // Node did not rerender, set grey background color and tooltip
-      backgroundColor = '#bbb';
-      tooltip = 'Client did not rerender';
+      // Component didn't rerender
+      backgroundColor = '#9ca3af';
+      color = '#ffffff';
+      tooltip += '\nDid not rerender';
     }
 
     return {
@@ -166,6 +238,7 @@ export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[]
       value,
       tooltip,
       backgroundColor,
+      color,
       children,
     };
   }
@@ -181,19 +254,29 @@ export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[]
 
     const snapshotIds = Object.keys(snapshots).map(Number);
     if (snapshotIds.length === 0) continue;
-    // Use the node with displayName === 'App' as the root, fallback to smallest id if not found
+
+    // Find the actual root component (usually has displayName and is at the top)
     let rootId = snapshotIds[0];
     for (const id of snapshotIds) {
-      if (snapshots[id].displayName === 'App') {
+      const node = snapshots[id];
+      if (node && node.displayName && (node.displayName.includes('Router') || node.displayName === 'App')) {
         rootId = id;
         break;
       }
     }
+
+    // If we still don't have a good root, use the first node with a displayName
+    if (!snapshots[rootId].displayName) {
+      for (const id of snapshotIds) {
+        if (snapshots[id].displayName) {
+          rootId = id;
+          break;
+        }
+      }
+    }
+
     result.push(buildNode(rootId, snapshots));
   }
 
-  // Log the result for debugging
-  // eslint-disable-next-line no-console
-  // console.log('FlameGraphNode result:', JSON.stringify(result, null, 2));
   return result;
 }

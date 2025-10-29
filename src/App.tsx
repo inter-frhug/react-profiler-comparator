@@ -17,7 +17,7 @@ const Input = (props) => <input {...props} style={inputStyle} />;
 export default function App() {
   const [profiles, setProfiles] = useState<[FlameGraphNode | null, FlameGraphNode | null]>([null, null]);
 
-  const handleFileUpload = async (index, event) => {
+  const handleFileUpload = async (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
@@ -45,7 +45,7 @@ export default function App() {
   // Find the max depth among both profiles
   const maxDepth = Math.max(getMaxDepth(profiles[0]), getMaxDepth(profiles[1]));
   // Each row is about 24px high in react-flame-graph
-  const flameGraphHeight = Math.max(200, maxDepth * 28 + 40); // 28 for padding, 40 for header
+  const flameGraphHeight = Math.max(300, maxDepth * 32 + 60); // More height for better visibility
 
   return (
     <div
@@ -81,16 +81,32 @@ export default function App() {
       >
         {[0, 1].map((i) => (
           <div key={i} style={{ marginRight: 16, flex: 1 }}>
-            <Input type='file' accept='application/json' onChange={(e) => handleFileUpload(i, e)} />
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: '#374151' }}>
+              Profile {i + 1}
+            </h3>
+            <Input 
+              type='file' 
+              accept='application/json' 
+              onChange={(e) => handleFileUpload(i, e)} 
+              placeholder="Select React profiler JSON file..."
+            />
             {profiles[i] && (
-              <FlameGraph
-                data={profiles[i]}
-                height={flameGraphHeight}
-                width={800}
-                onChange={(node) => {
-                  console.log(`"${node.name}" focused`);
-                }}
-              />
+              <div style={{ 
+                border: '1px solid #e1e5e9', 
+                borderRadius: 8, 
+                overflow: 'hidden', 
+                backgroundColor: '#fff',
+                marginTop: 12 
+              }}>
+                <FlameGraph
+                  data={profiles[i]}
+                  height={flameGraphHeight}
+                  width={800}
+                  onChange={(node: FlameGraphNode) => {
+                    console.log(`"${node.name}" focused`);
+                  }}
+                />
+              </div>
             )}
           </div>
         ))}
