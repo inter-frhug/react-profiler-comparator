@@ -1,12 +1,45 @@
-# React + Vite
+# React Profiler Comparator
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+[![Netlify Status](https://api.netlify.com/api/v1/badges/6c3e0cbd-5d4b-49f0-b13a-c4edd2ce8304/deploy-status)](https://app.netlify.com/projects/reactprofilercomparison/deploys)
 
-Currently, two official plugins are available:
+A React application for comparing and visualizing React profiler data, built with Vite.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Getting Started
 
-## Expanding the ESLint configuration
+### Prerequisites
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+This project uses `pnpm` as the package manager. Make sure you have it installed:
+
+```bash
+npm install -g pnpm
+```
+
+### Running the Application
+
+1. **Install dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+2. **Start the development server**:
+   ```bash
+   pnpm dev
+   ```
+
+The app will be available at `http://localhost:5173` with hot reload enabled.
+
+### Available Scripts
+
+- **Development server**: `pnpm dev`
+- **Build for production**: `pnpm build`
+- **Preview production build**: `pnpm preview`
+- **Run linter**: `pnpm lint`
+
+## Tech Stack
+
+- React 19
+- Vite
+- TypeScript
+- React Flame Graph
+- Recharts
+- ESLint
