@@ -86,11 +86,44 @@ type CommitData = {
 export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[] {
   const result: FlameGraphNode[] = [];
 
+  // Helper to parse Memo wrapper
+  function parseMemo(name: string): { base: string; isMemo: boolean } {
+    const memoMatch = name.match(/^Memo\((.+)\)$/);
+    if (memoMatch) {
+      return { base: memoMatch[1], isMemo: true };
+    }
+    return { base: name, isMemo: false };
+  }
+
+  // Build a map from both base and memoized names to durations
+  const nameToDurations: Record<string, number[]> = {};
+  if (Array.isArray(json.timelineData)) {
+    for (const timeline of json.timelineData) {
+      if (Array.isArray(timeline.componentMeasures)) {
+        for (const measure of timeline.componentMeasures) {
+          if (measure.componentName) {
+            const { base, isMemo } = parseMemo(measure.componentName);
+            // Store under base name
+            if (!nameToDurations[base]) {
+              nameToDurations[base] = [];
+            }
+            nameToDurations[base].push(measure.duration);
+            // Also store under base + ' (Memo)' if memoized
+            if (isMemo) {
+              const memoName = base + ' (Memo)';
+              if (!nameToDurations[memoName]) {
+                nameToDurations[memoName] = [];
+              }
+              nameToDurations[memoName].push(measure.duration);
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Helper to recursively build FlameGraphNode from snapshot id
-  function buildNode(
-    id: number,
-    snapshots: Snapshots
-  ): FlameGraphNode {
+  function buildNode(id: number, snapshots: Snapshots): FlameGraphNode {
     const node = snapshots[id];
     if (!node) {
       return { name: 'Unknown', value: 0 };
@@ -98,13 +131,41 @@ export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[]
     let children: FlameGraphNode[] | undefined = undefined;
     let value = 1;
     if (node.children && node.children.length > 0) {
-      children = node.children.map(childId => buildNode(childId, snapshots));
+      children = node.children.map((childId) => buildNode(childId, snapshots));
       value = children.reduce((sum, child) => sum + child.value, 0);
     }
+
+    // Find the first matching duration for this node's displayName (handle Memo)
+    let displayName = node.displayName || 'Unknown';
+    const { base, isMemo } = parseMemo(displayName);
+    let nameWithDuration = base;
+    if (isMemo) {
+      nameWithDuration += ' (Memo)';
+    }
+    let backgroundColor: string | undefined = undefined;
+    let tooltip = `id: ${node.id}`;
+    // Try both base and base + ' (Memo)' for duration lookup
+    let durationArr = nameToDurations[nameWithDuration] && nameToDurations[nameWithDuration].length > 0 ? nameToDurations[nameWithDuration] : nameToDurations[base] && nameToDurations[base].length > 0 ? nameToDurations[base] : undefined;
+    if (durationArr) {
+      const duration = durationArr.shift();
+      if (typeof duration === 'number') {
+        if (duration === 0) {
+          nameWithDuration += ' (<0.1ms)';
+        } else {
+          nameWithDuration += ` (${duration.toFixed(2)}ms)`;
+        }
+      }
+    } else {
+      // Node did not rerender, set grey background color and tooltip
+      backgroundColor = '#bbb';
+      tooltip = 'Client did not rerender';
+    }
+
     return {
-      name: (node.displayName || 'Unknown'),
+      name: nameWithDuration,
       value,
-      tooltip: `id: ${node.id}`,
+      tooltip,
+      backgroundColor,
       children,
     };
   }
@@ -133,6 +194,6 @@ export function parseProfilerForFlameGraph(json: ProfilerJSON): FlameGraphNode[]
 
   // Log the result for debugging
   // eslint-disable-next-line no-console
-  console.log('FlameGraphNode result:', JSON.stringify(result, null, 2));
+  // console.log('FlameGraphNode result:', JSON.stringify(result, null, 2));
   return result;
 }

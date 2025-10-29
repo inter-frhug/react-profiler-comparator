@@ -55,10 +55,8 @@ export default function App() {
         flexDirection: 'column',
         alignItems: 'stretch',
         justifyContent: 'flex-start',
-        padding: 0,
         background: '#fff',
-        marginLeft: 32,
-        marginTop: 32,
+        padding: 32,
       }}
     >
       <h1
